@@ -9,7 +9,7 @@ const app = express();
 // Đọc biến môi trường
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
-const MONGO_URI = "mongodb+srv://74ngobaolam:5M8GuHmG211ijaQM@cluster0.w0axwv3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"; // ✅ đúng biến
+const MONGO_URI = process.env.MONGO_URI; // ✅ đúng biến
 
 console.log('🔍 MONGO_URI type:', typeof MONGO_URI); // debug
 
@@ -40,6 +40,19 @@ app.get('/api/videos', async (req, res) => {
   res.json(data);
 });
 
+app.get('/api/videos/:code', async (req, res) => {
+  try {
+    const video = await Video.findOne({ code: req.params.code });
+    if (!video) {
+      return res.status(404).json({ error: 'Không tìm thấy mã này' });
+    }
+    res.json({ link: video.link });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Lỗi server' });
+  }
+});
+
 app.post('/api/videos', async (req, res) => {
   const { pass, code, link } = req.body;
   if (pass !== ADMIN_PASS) return res.status(403).json({ error: 'Sai mật khẩu admin' });
@@ -59,4 +72,3 @@ app.delete('/api/videos/:code', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
-
