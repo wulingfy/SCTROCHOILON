@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin | Video-by-Code</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="bg">
+  <div class="container">
+    <nav class="topbar">
+      <a class="btn ghost" href="index.html">← Trang chọn vai trò</a>
+      <h1 class="title sm">Admin</h1>
+    </nav>
+
+    <!-- Màn hình nhập mật khẩu -->
+    <section id="loginScreen" class="card">
+      <h2 class="card-title">Nhập mật khẩu Admin</h2>
+      <div class="row">
+        <input id="adminPass" class="input" type="password" placeholder="Mật khẩu">
+        <button id="loginBtn" class="btn">Đăng nhập</button>
+      </div>
+      <div id="loginMsg" class="msg"></div>
+    </section>
+
+    <!-- Panel Admin -->
+    <div id="adminPanel" style="display:none;">
+      <section class="card">
+        <h2 class="card-title">Thêm / Cập nhật mã → YouTube</h2>
+        <div class="row wrap">
+          <input id="code" class="input" type="text" placeholder="Mã (không dấu cách)" autocomplete="off">
+          <input id="link" class="input grow" type="text" placeholder="Link YouTube" autocomplete="off">
+          <button id="save" class="btn">Lưu</button>
+        </div>
+        <div id="adminMsg" class="msg"></div>
+        <div class="row wrap">
+          <input id="search" class="input grow" type="text" placeholder="Tìm theo mã hoặc link...">
+          <button id="exportBtn" class="btn outline">Xuất JSON</button>
+          <label class="btn outline file">
+            Nhập JSON
+            <input id="importFile" type="file" accept="application/json" hidden>
+          </label>
+          <button id="clearAll" class="btn danger">Xoá tất cả</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Danh sách mã</h2>
+        <div id="list" class="list"></div>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title">Xem thử</h2>
+        <div id="preview" class="video"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    // ========= API kết nối MongoDB =========
+    const API_URL = '/api/videos';
+    const ADMIN_PASS_INPUT = document.getElementById('adminPass');
+
+    const App = {
+      _cache: {},
+      async getAll() {
+        const res = await fetch(API_URL);
+        this._cache = await res.json();
+        return this._cache;
+      },
+      async set(code, link) {
+        const pass = ADMIN_PASS_INPUT.value.trim();
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pass, code, link })
+        });
+        return res.json();
+      },
+      async remove(code) {
+        const pass = ADMIN_PASS_INPUT.value.trim();
+        const res = await fetch(`${API_URL}/${encodeURIComponent(code)}?pass=${pass}`, {
+          method: 'DELETE'
+        });
+        return res.json();
+      },
+      async replaceAll(obj) {
+        // Xóa hết
+        const all = await this.getAll();
+        for (const c of Object.keys(all)) {
+          await this.remove(c);
+        }
+        // Thêm lại
+        for (const [c, l] of Object.entries(obj)) {
+          await this.set(c, l);
+        }
+      },
+      resolve(code) {
+        return this._cache[code] || '';
+      },
+      toYoutubeEmbed(url) {
+        const match = url.match(/(?:v=|\.be\/)([^&\n?#]+)/);
+        return match ? `https://www.youtube.com/embed/${match[1]}` : '';
+      }
+    };
+
+    // ========= Xử lý UI =========
+    const loginScreen = document.getElementById('loginScreen');
+    const adminPanel = document.getElementById('adminPanel');
+    const loginBtn = document.getElementById('loginBtn');
+    const passInput = document.getElementById('adminPass');
+    const loginMsg = document.getElementById('loginMsg');
+
+    loginBtn.addEventListener('click', async () => {
+      const pass = passInput.value.trim();
+      if (!pass) {
+        loginMsg.textContent = 'Vui lòng nhập mật khẩu!';
+        return;
+      }
+      // Chỉ thử fetch xem API hoạt động
+      await App.getAll();
+      loginScreen.style.display = 'none';
+      adminPanel.style.display = 'block';
+      initAdmin();
+    });
+
+    passInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') loginBtn.click();
+    });
+
+    function initAdmin(){
+      const codeEl = document.getElementById('code');
+      const linkEl = document.getElementById('link');
+      const saveBtn = document.getElementById('save');
+      const adminMsg = document.getElementById('adminMsg');
+      const listEl = document.getElementById('list');
+      const previewEl = document.getElementById('preview');
+      const searchEl = document.getElementById('search');
+      const exportBtn = document.getElementById('exportBtn');
+      const importFile = document.getElementById('importFile');
+      const clearAllBtn = document.getElementById('clearAll');
+
+      function toast(text) {
+        adminMsg.textContent = text;
+        setTimeout(()=> adminMsg.textContent = '', 1500);
+      }
+
+      async function render(filter='') {
+        const data = await App.getAll();
+        const entries = Object.entries(data)
+          .filter(([k,v]) => (k+v).toLowerCase().includes(filter.toLowerCase()))
+          .sort((a,b)=> a[0].localeCompare(b[0]));
+        
+        if (!entries.length) {
+          listEl.innerHTML = '<div class="empty">Chưa có mã nào.</div>';
+          return;
+        }
+
+        listEl.innerHTML = entries.map(([k,v]) => `
+          <div class="item">
+            <div class="item-main">
+              <div class="tag">${k}</div>
+              <div class="link" title="${v}">${v}</div>
+            </div>
+            <div class="actions">
+              <button class="btn xs" data-action="test" data-code="${encodeURIComponent(k)}">Xem</button>
+              <button class="btn xs outline" data-action="copy" data-code="${encodeURIComponent(k)}">Copy</button>
+              <button class="btn xs outline" data-action="edit" data-code="${encodeURIComponent(k)}">Sửa</button>
+              <button class="btn xs danger" data-action="del" data-code="${encodeURIComponent(k)}">Xoá</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      async function handleAction(e) {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const code = decodeURIComponent(btn.dataset.code);
+        if (action === 'test') {
+          const link = App.resolve(code);
+          const embed = App.toYoutubeEmbed(link);
+          previewEl.innerHTML = embed ? 
+            `<iframe src="${embed}" frameborder="0" allowfullscreen></iframe>` :
+            `<div class="msg">Link không hợp lệ.</div>`;
+        }
+        if (action === 'copy') {
+          navigator.clipboard.writeText(code);
+          toast('Đã copy mã: ' + code);
+        }
+        if (action === 'edit') {
+          const link = App.resolve(code) || '';
+          codeEl.value = code;
+          linkEl.value = link;
+          codeEl.focus();
+        }
+        if (action === 'del') {
+          if (confirm(`Xoá mã "${code}"?`)) {
+            await App.remove(code);
+            render(searchEl.value.trim());
+            previewEl.innerHTML = '';
+          }
+        }
+      }
+
+      saveBtn.addEventListener('click', async () => {
+        const code = codeEl.value.trim();
+        const link = linkEl.value.trim();
+        if (!code || !link) { toast('Nhập đủ mã và link.'); return; }
+        if (/\s/.test(code)) { toast('Mã không được có dấu cách.'); return; }
+        if (!App.toYoutubeEmbed(link)) { toast('Link YouTube không hợp lệ.'); return; }
+        await App.set(code, link);
+        render(searchEl.value.trim());
+        toast('Đã lưu.');
+        codeEl.value = '';
+        linkEl.value = '';
+      });
+
+      listEl.addEventListener('click', handleAction);
+      searchEl.addEventListener('input', () => render(searchEl.value.trim()));
+
+      exportBtn.addEventListener('click', async () => {
+        const data = await App.getAll();
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'video-code-mappings.json';
+        document.body.appendChild(a); a.click();
+        URL.revokeObjectURL(url); a.remove();
+      });
+
+      importFile.addEventListener('change', async () => {
+        const file = importFile.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const obj = JSON.parse(text);
+          if (typeof obj !== 'object' || Array.isArray(obj)) throw 0;
+          await App.replaceAll(obj);
+          render(searchEl.value.trim());
+          toast('Đã nhập dữ liệu.');
+        } catch {
+          toast('File JSON không hợp lệ.');
+        } finally {
+          importFile.value = '';
+        }
+      });
+
+      clearAllBtn.addEventListener('click', async () => {
+        if (confirm('Xoá toàn bộ mapping?')) {
+          await App.replaceAll({});
+          render('');
+          previewEl.innerHTML = '';
+        }
+      });
+
+      render();
+    }
+  </script>
+</body>
+</html>
