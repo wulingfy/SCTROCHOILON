@@ -9,7 +9,7 @@ const app = express();
 // Đọc biến môi trường
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
-const MONGO_URI = process.env.MONGO_URI; // ✅ đúng biến
+const MONGO_URI = "mongodb+srv://74ngobaolam:5M8GuHmG211ijaQM@cluster0.w0axwv3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"; // ✅ đúng biến
 
 console.log('🔍 MONGO_URI type:', typeof MONGO_URI); // debug
 
@@ -59,3 +59,4 @@ app.delete('/api/videos/:code', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
+
